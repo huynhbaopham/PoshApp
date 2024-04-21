@@ -1,0 +1,7 @@
+compose-dev.yaml
+.streamlit/secrets.toml
+secrets.toml
+__pycache__
+.DS_Store
+pyrightconfig.json
+.streamlit/poshdb.pem
