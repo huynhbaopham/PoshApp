@@ -40,143 +40,143 @@ def insert_visit(client_id, services):
     except:
         return None
 
-def checkin(phone, services):
-    conn = init_connection()
-    # get client data from checkin or signup
-    client = get_client(phone)
-    if client.empty():
-        client = insert_client(phone)
+# def checkin(phone, services):
+#     conn = init_connection()
+#     # get client data from checkin or signup
+#     client = get_client(phone)
+#     if client.empty():
+#         client = insert_client(phone)
 
-    client_id = client[0]["id"]
-
-
-        # client exists in DB
-        if r != None:
-            conn.execute(
-                f"SELECT * FROM CheckIns WHERE DATE(dateTime)=CURDATE() and phoneNumber={phone};"
-            )
-            # new checkin of an active session
-            if conn.fetchone() == None:
-                conn.execute(
-                    f"UPDATE Clients SET points={r[1]+1} WHERE phoneNumber={phone}"
-                )
-                # insert checkin input
-                if len(services) == 0:
-                    conn.execute(
-                        f"INSERT INTO CheckIns (phoneNumber) VALUES ({phone});"
-                    )
-                else:
-                    services = ", ".join(services)
-                    conn.execute(
-                        f"INSERT INTO CheckIns (phoneNumber, services) VALUES ({phone}, '{services}');"
-                    )
-
-    except:
-        conn.close()
-        return -1
-
-    conn.close()
-    return r
+#     client_id = client[0]["id"]
 
 
-def signup(client):
-    db = poshdb_connect()
-    conn = db.cursor()
+#         # client exists in DB
+#         if r != None:
+#             conn.execute(
+#                 f"SELECT * FROM CheckIns WHERE DATE(dateTime)=CURDATE() and phoneNumber={phone};"
+#             )
+#             # new checkin of an active session
+#             if conn.fetchone() == None:
+#                 conn.execute(
+#                     f"UPDATE Clients SET points={r[1]+1} WHERE phoneNumber={phone}"
+#                 )
+#                 # insert checkin input
+#                 if len(services) == 0:
+#                     conn.execute(
+#                         f"INSERT INTO CheckIns (phoneNumber) VALUES ({phone});"
+#                     )
+#                 else:
+#                     services = ", ".join(services)
+#                     conn.execute(
+#                         f"INSERT INTO CheckIns (phoneNumber, services) VALUES ({phone}, '{services}');"
+#                     )
 
-    try:
-        conn.execute(
-            f"SELECT firstName, points FROM Clients WHERE phoneNumber={client[0]};"
-        )
-        c = conn.fetchone()
-        if c != None:
-            conn.close()
-            checkin(phone=client[0], services=client[-1], client=c)
-            return 0, c
+#     except:
+#         conn.close()
+#         return -1
 
-        conn.execute(
-            """
-                     INSERT INTO Clients (phoneNumber, firstName, lastName, birthdate)
-                     VALUES (%s, %s, %s, %s)
-                     """,
-            client[:-1],
-        )
-        # insert checkin input
-        if len(client[-1]) == 0:
-            conn.execute(f"INSERT INTO CheckIns (phoneNumber) VALUES ({client[0]});")
-        else:
-            services = ", ".join(client[-1])
-            conn.execute(
-                f"INSERT INTO CheckIns (phoneNumber, services) VALUES ({client[0]}, '{services}');"
-            )
-
-    except:
-        conn.close()
-        return -1, None
-
-    conn.close()
-    return 1, None
+#     conn.close()
+#     return r
 
 
-def get_checkins(sdate, edate):
-    sdate = datetime.combine(sdate, time.fromisoformat("00:00:01-07:00")).astimezone()
-    edate = datetime.combine(edate, time.fromisoformat("23:59:59-07:00")).astimezone()
+# def signup(client):
+#     db = poshdb_connect()
+#     conn = db.cursor()
 
-    db = poshdb_connect()
-    conn = db.cursor()
+#     try:
+#         conn.execute(
+#             f"SELECT firstName, points FROM Clients WHERE phoneNumber={client[0]};"
+#         )
+#         c = conn.fetchone()
+#         if c != None:
+#             conn.close()
+#             checkin(phone=client[0], services=client[-1], client=c)
+#             return 0, c
 
-    try:
-        conn.execute(
-            f"SELECT CONCAT(firstName, ' ', lastName) as name, birthdate, points, Clients.phoneNumber, services, dateTime FROM Clients, CheckIns WHERE Clients.phoneNumber = CheckIns.phoneNumber AND dateTime BETWEEN '{sdate}' AND '{edate}';"
-        )
-        clients = conn.fetchall()
-        conn.close()
-    except:
-        conn.close()
-        return -1
-    return clients
+#         conn.execute(
+#             """
+#                      INSERT INTO Clients (phoneNumber, firstName, lastName, birthdate)
+#                      VALUES (%s, %s, %s, %s)
+#                      """,
+#             client[:-1],
+#         )
+#         # insert checkin input
+#         if len(client[-1]) == 0:
+#             conn.execute(f"INSERT INTO CheckIns (phoneNumber) VALUES ({client[0]});")
+#         else:
+#             services = ", ".join(client[-1])
+#             conn.execute(
+#                 f"INSERT INTO CheckIns (phoneNumber, services) VALUES ({client[0]}, '{services}');"
+#             )
+
+#     except:
+#         conn.close()
+#         return -1, None
+
+#     conn.close()
+#     return 1, None
 
 
+# def get_checkins(sdate, edate):
+#     sdate = datetime.combine(sdate, time.fromisoformat("00:00:01-07:00")).astimezone()
+#     edate = datetime.combine(edate, time.fromisoformat("23:59:59-07:00")).astimezone()
+
+#     db = poshdb_connect()
+#     conn = db.cursor()
+
+#     try:
+#         conn.execute(
+#             f"SELECT CONCAT(firstName, ' ', lastName) as name, birthdate, points, Clients.phoneNumber, services, dateTime FROM Clients, CheckIns WHERE Clients.phoneNumber = CheckIns.phoneNumber AND dateTime BETWEEN '{sdate}' AND '{edate}';"
+#         )
+#         clients = conn.fetchall()
+#         conn.close()
+#     except:
+#         conn.close()
+#         return -1
+#     return clients
 
 
 
-def updateClientInfo(edited_rows, df):
-    instances = []
-    rows = edited_rows.keys()
-    for row in rows:
-        phone = df.at[row, "phoneNumber"]
-        changes = map(lambda i: f"{i[0]}='{i[1]}'", edited_rows[row].items())
-        changes = ", ".join(list(changes))
-        instances.append((changes, phone))
-
-    cmds = [f"UPDATE Clients SET {i[0]} WHERE phoneNumber={i[1]};" for i in instances]
-    db = poshdb_connect()
-    conn = db.cursor()
-    try:
-        for cmd in cmds:
-            conn.execute(cmd)
-        conn.close()
-        print("success")
-        return
-    except:
-        conn.close()
-        print("fail")
-        return -1
 
 
-def redeemDB(points: list, phones: list):
-    db = poshdb_connect()
-    conn = db.cursor()
-    try:
-        [
-            conn.execute(
-                f"UPDATE Clients SET points={point} WHERE phoneNumber={phone};"
-            )
-            for point, phone in zip(points, phones)
-        ]
-        conn.close()
-        print("success")
-        return
-    except:
-        conn.close()
-        print("fail")
-        return -1
+# def updateClientInfo(edited_rows, df):
+#     instances = []
+#     rows = edited_rows.keys()
+#     for row in rows:
+#         phone = df.at[row, "phoneNumber"]
+#         changes = map(lambda i: f"{i[0]}='{i[1]}'", edited_rows[row].items())
+#         changes = ", ".join(list(changes))
+#         instances.append((changes, phone))
+
+#     cmds = [f"UPDATE Clients SET {i[0]} WHERE phoneNumber={i[1]};" for i in instances]
+#     db = poshdb_connect()
+#     conn = db.cursor()
+#     try:
+#         for cmd in cmds:
+#             conn.execute(cmd)
+#         conn.close()
+#         print("success")
+#         return
+#     except:
+#         conn.close()
+#         print("fail")
+#         return -1
+
+
+# def redeemDB(points: list, phones: list):
+#     db = poshdb_connect()
+#     conn = db.cursor()
+#     try:
+#         [
+#             conn.execute(
+#                 f"UPDATE Clients SET points={point} WHERE phoneNumber={phone};"
+#             )
+#             for point, phone in zip(points, phones)
+#         ]
+#         conn.close()
+#         print("success")
+#         return
+#     except:
+#         conn.close()
+#         print("fail")
+#         return -1
