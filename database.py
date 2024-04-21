@@ -22,7 +22,7 @@ def init_connection():
 def get_client(phone):
     conn = init_connection()
     data, _ = conn.table("Client").select("id", "fname", "point").eq("phone", phone).execute()
-    return data[1]
+    return data
 
 def insert_client(phone):
     conn = init_connection()
