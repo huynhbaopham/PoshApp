@@ -1,14 +1,16 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
 import calendar
-from datetime import datetime
-from streamlit_autorefresh import st_autorefresh
+from datetime import date, timedelta
+
+from twilio.rest.verify import Verify
 from database import *
+from messaging import verify_send_token, verify_check_token
 
 
 # ---------------Settings -----------------
 
-page_title = "Posh Lounge | Check In"
+page_title = "Posh Lounge | Sign Up"
 page_icon = "💅"
 layout = "centered"
 
@@ -23,177 +25,144 @@ st.set_page_config(
 )
 st.title("Welcome to Posh Nail Lounge")
 
-# ----- Drop down for selecting period ----
-years = [datetime.today().year - 1, datetime.today().year, datetime.today().year + 1]
-months = list(calendar.month_name[1:])
 
 # ----- HIDE Streamlit Style --------------
 
-# hide_st_style = """
-#     <style>
-#         #MainMenu {visibility: hidden;}
-#         footer {visibility:hidden;}
-#         header {visibility:hidden;}
-#     </style>
-#     """
-# st.markdown(hide_st_style, unsafe_allow_html=True)
+hide_st_style = """
+    <style>
+        #MainMenu {visibility: hidden;}
+        footer {visibility:hidden;}
+        header {visibility:hidden;}
+    </style>
+    """
+st.markdown(hide_st_style, unsafe_allow_html=True)
+
+# ----- session variables ----
+years = [
+    date.today() - timedelta(days=100 * 365.25),
+    date.today() - timedelta(days=16 * 365.25),
+]
 
 
-# ---------Session State Instances --------
+# ---------Function & Callbacks --------
+def phone_validated(phone):
+    phone_digit = "".join(filter(str.isdigit, phone))
+    return len(phone_digit) == 10
 
-# if "InputPhone" not in st.session_state:
-#     st.session_state.InputPhone = ""
-#     st.session_state.InputServices = None
-#     st.session_state.InputFirst = ""
-#     st.session_state.InputLast = ""
-#     st.session_state.InputBirthdate = None
+
+def token_validated(token):
+    phone_digit = "".join(filter(str.isdigit, token))
+    return len(phone_digit) == 6
+
+
+def name_validated(name):
+    return name.isalpha()
+
+
+def birthdate_validated(birthdate):
+    if birthdate is None:
+        return False
+    return birthdate <= years[1]
 
 
 # --------------- Nav Bar -----------------
-
 selected = option_menu(
     menu_title=None,
-    options=["Check In", "Sign Up"],
-    icons=["box-arrow-in-left", "plus-square"],
+    options=["Sign Up"],
+    icons=["plus-square"],
     orientation="horizontal",
+    styles={
+        "icon": {"font-size": "20px"},
+        "nav-link": {"font-size": "20px"},
+    },
 )
-_count = st_autorefresh(interval=2500, limit=None, key="CheckInRefresh")
 # ------- Input & Save periods ----
-if selected == "Check In":
-    st.header("Check In")
-    with st.form("checkin_form", clear_on_submit=True):
-        options = (
-            "Pedicure",
-            "Reg. Manicure",
-            "Gel Manicure",
-            "Liquiq full set",
-            "Liquiq Fill",
-            "Full set",
-            "Fill",
-            "Dip",
-            "Wax",
-        )
-        col1, col2 = st.columns([0.4, 0.6])
-        col1.text_input(
-            label="Phone Number",
-            value="",
-            placeholder="(480) 590-6703",
-            max_chars=10,
-            key="phone",
-        )
-        col2.multiselect(
-            label="Services",
-            options=options,
-            placeholder="Choose your service(s)",
-            key="services",
-        )
+box = st.empty()
+signup = box.container(border=True)
+col1, col2 = signup.columns(2)
+fname = col1.text_input(
+    label="First name",
+    value="",
+    placeholder="Pretty",
+    max_chars=20,
+    key="fname",
+)
+lname = col2.text_input(
+    label="Last Name",
+    value="",
+    placeholder="Bella",
+    max_chars=20,
+    key="lname",
+)
+phone = signup.text_input(
+    label="Phone Number",
+    value="",
+    placeholder="(480) 590-6703",
+    max_chars=16,
+    key="phone",
+)
 
-        submitted = st.form_submit_button("Enter", type="primary")
-        if submitted:
-            phone = st.session_state.phone
-            services = st.session_state.services
-            if not phone.isnumeric() or not len(phone) == 10:
-                st.error(
-                    f"{phone}: Please enter a valid 10-digit phone number.", icon="⚠️"
-                )
-            else:
-                results = checkin(phone=phone, services=services)
-                if results != None and results != -1:
-                    st.success(
-                        f"Welcome, {results[0]}! You have {results[1]} points.",
-                        icon="🥳",
-                    )
-                if results == None:
-                    st.warning(f"{phone}: New Client. Please sign up.", icon="🙏")
-                if results == -1:
-                    st.error("Update error. Please retry.", icon="⚠️")
+birthdate = signup.date_input(
+    label="Birthdate",
+    value=years[1],
+    format="YYYY-MM-DD",
+    min_value=years[0],
+    max_value=date.today(),
+    key="birthdate",
+)
+clicked = signup.button("Submit", type="primary", use_container_width=True)
+valid = False
 
-# ------- Display periods -----------
-if selected == "Sign Up":
+if clicked:
+    valid = True
+    if not phone_validated(phone):
+        st.warning(f"{phone}: Invalid phone number", icon="⚠️")
+        valid = False
 
-    st.header("Sign Up")
-    with st.form("signup_form", clear_on_submit=True):
-        options = (
-            "Pedicure",
-            "Reg. Manicure",
-            "Gel Manicure",
-            "Liquiq full set",
-            "Liquiq Fill",
-            "Full set",
-            "Fill",
-            "Dip",
-            "Wax",
-        )
+    if not name_validated(fname):
+        st.warning(f"{fname}: Invalid first name. Only alphabet allowed.", icon="⚠️")
+        valid = False
 
-        col1, col2 = st.columns(2)
-        col1.text_input(
-            label="First name",
-            value="",
-            placeholder="Pretty",
-            max_chars=20,
-            key="fname",
-        )
-        col2.text_input(
-            label="Last Name",
-            value="",
-            placeholder="Bella",
-            max_chars=20,
-            key="lname",
-        )
-        st.text_input(
-            label="Phone Number",
-            value="",
-            placeholder="(480) 590-6703",
-            max_chars=10,
-            key="phone",
-        )
-        st.date_input(
-            label="Birthdate", value=None, format="YYYY-MM-DD", key="birthdate"
-        )
-        st.multiselect(
-            label="Today Services",
-            options=options,
-            default=None,
-            placeholder="Choose your service(s)",
-            key="services",
-        )
-        submitted = st.form_submit_button("Submit", type="primary")
-        if submitted:
-            valid = True
-            client = (
-                st.session_state["phone"],
-                st.session_state["fname"],
-                st.session_state["lname"],
-                st.session_state["birthdate"],
-                st.session_state["services"],
-            )
-            if not client[0].isnumeric() or len(client[0]) != 10:
-                st.error(
-                    f"{client[0]}: Please enter a valid 10-digit phone number.",
-                    icon="⚠️",
-                )
-                valid = False
-            if not client[1].isalpha():
-                st.error(
-                    f"{client[1]}: Please enter your first name. Alphabet only.",
-                    icon="⚠️",
-                )
-                valid = False
-            if not client[2].isalpha():
-                st.error(
-                    f"{client[2]}: Please enter your last name. Alphabet only.",
-                    icon="⚠️",
-                )
-                valid = False
-            if not client[3]:
-                st.error(f"{client[3]}: Please set your birthdate.", icon="⚠️")
-                valid = False
+    if not name_validated(lname):
+        st.warning(f"{lname}: Invalid last name. Only alphabet allowed.", icon="⚠️")
+        valid = False
 
-            if valid:
-                r, c = signup(client=client)
-                if r == 1:
-                    st.success(f"Welcome, {client[1]}! You have 1 points.", icon="🥳")
-                if r == -1:
-                    st.error("Update error. Please retry.", icon="⚠️")
-                if r == 0:
-                    st.success(f"Welcome, {c[0]}! You have {c[1]} points.", icon="🥳")
+    if not birthdate_validated(birthdate):
+        st.warning(
+            f"{birthdate}: Invalid birthdate name. Must be 16 or older.", icon="⚠️"
+        )
+        valid = False
+
+    client = get_client(phone) if valid else None
+
+    # if client != None:
+    #     st.warning(f"{phone}: Existing client. Sign in here.", icon="⚠️")
+    #     valid = False
+
+    verified = verify_send_token(phone) if valid else None
+
+    if valid and verified == None:
+        st.warning(f"{phone}: Invalid phone number.", icon="⚠️")
+        valid = False
+
+if valid:
+    box.empty()
+    otp = st.container(border=True)
+    # box.success(f"Welcome to Posh Nail Lounge, {fname}!")
+    token = otp.text_input(
+        label="One time passcode", value="", max_chars=6, key="token"
+    )
+    otp_sent = otp.button("Send", type="primary", use_container_width=True)
+    if otp_sent:
+        while verify_check_token(phone, token) != "approved":
+            otp.success("Invalid OTP code!")
+
+        otp.success(f"Welcome to Posh, {fname}!")
+
+    # otp = box.container()
+    # token = box.text_input(
+    #     label="One time passcode", value="", max_chars=6, key="token"
+    # )
+    # if box.button("Send", type="primary", use_container_width=True):
+    #     if verify_check_token(phone, token) == "approved":
+    #         box.success(f"Welcome to Posh Nail Lounge, {fname}!")
